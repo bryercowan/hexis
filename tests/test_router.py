@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from unittest.mock import MagicMock, patch
 
-from cua_sl.model.router import MoERouter
+from hexis.model.router import MoERouter
 
 
 class FakeBackbone:

@@ -1,31 +1,17 @@
-#!/usr/bin/env python3
-"""CLI: SFT an expert head.
-
-Usage:
-    python scripts/train_expert_sft.py \
-        --data data/popup_train.jsonl \
-        --val-data data/popup_val.jsonl \
-        --expert dismiss_popups \
-        --subgoal "dismiss popup green button" \
-        --epochs 20 --output checkpoints/popup_sft
-"""
+"""CLI entry point for SFT training. Invoked via python -m hexis.training.sft_cli."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-import sys
-import time
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
 
-from cua_sl.model.backbone import VLMBackbone
-from cua_sl.model.expert_head import EXPERT_DIM, NUM_ACTION_TYPES, ExpertActionHead
-from cua_sl.training.sft import (
+from hexis.model.backbone import VLMBackbone
+from hexis.model.expert_head import EXPERT_DIM, NUM_ACTION_TYPES, ExpertActionHead
+from hexis.training.sft import (
     EMAModel,
     ExpertSFTDataset,
     extract_features,
@@ -37,7 +23,7 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SFT train an expert head")
+    parser = argparse.ArgumentParser(description="Hexis: SFT train an expert head")
     parser.add_argument("--data", required=True, help="Training JSONL path")
     parser.add_argument("--val-data", help="Validation JSONL path")
     parser.add_argument("--expert", required=True, help="Expert name")
@@ -64,11 +50,9 @@ def main() -> None:
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-    # Load backbone
     log.info("Loading backbone: %s", args.backbone)
     backbone = VLMBackbone(model_name=args.backbone)
 
-    # Load data
     train_ds = ExpertSFTDataset(args.data, args.subgoal)
     log.info("Train samples: %d", len(train_ds))
 
@@ -77,7 +61,6 @@ def main() -> None:
         val_ds = ExpertSFTDataset(args.val_data, args.subgoal)
         log.info("Val samples: %d", len(val_ds))
 
-    # Extract features
     train_features, grid_h, grid_w = extract_features(
         train_ds, backbone, cache_path=args.feature_cache,
     )
@@ -86,7 +69,6 @@ def main() -> None:
         val_cache = f"{args.feature_cache}_val" if args.feature_cache else None
         val_features, _, _ = extract_features(val_ds, backbone, cache_path=val_cache)
 
-    # Create expert head
     expert = ExpertActionHead(
         backbone_dim=backbone.hidden_dim,
         expert_dim=EXPERT_DIM,
@@ -135,9 +117,8 @@ def main() -> None:
             best_val_loss = val_loss
             best_path = output_dir / "best"
             save_expert(ema.shadow, ema, args.subgoal, best_path)
-            log.info("  Saved best → %s", best_path)
+            log.info("  Saved best -> %s", best_path)
 
-    # Save final
     final_path = output_dir / "final"
     save_expert(expert, ema, args.subgoal, final_path)
 

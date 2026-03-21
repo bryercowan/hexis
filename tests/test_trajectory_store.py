@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from cua_sl.data.schemas import TrajectoryRecord
-from cua_sl.data.trajectory_store import TrajectoryStore
+from hexis.data.schemas import TrajectoryRecord
+from hexis.data.trajectory_store import TrajectoryStore
 
 
 def _make_record(label: str = "test", content: str = "hello") -> TrajectoryRecord:

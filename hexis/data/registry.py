@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cua_sl.data.schemas import (
+from hexis.data.schemas import (
     CheckpointRecord,
     DataRequest,
     DataSource,

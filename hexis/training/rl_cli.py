@@ -1,34 +1,23 @@
-#!/usr/bin/env python3
-"""CLI: RL fine-tune an expert head on live browser.
-
-Usage:
-    python scripts/train_expert_rl.py \
-        --checkpoint checkpoints/popup_sft/best \
-        --subgoal "dismiss popup green button" \
-        --episodes 2000 --output checkpoints/popup_rl
-"""
+"""CLI entry point for RL training. Invoked via python -m hexis.training.rl_cli."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import torch
 
-from cua_sl.model.backbone import VLMBackbone
-from cua_sl.model.expert_head import EXPERT_DIM, NUM_ACTION_TYPES, ExpertActionHead
-from cua_sl.training.rl import train_rl
+from hexis.model.backbone import VLMBackbone
+from hexis.model.expert_head import EXPERT_DIM, NUM_ACTION_TYPES, ExpertActionHead
+from hexis.training.rl import train_rl
 
 log = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="RL fine-tune an expert head")
+    parser = argparse.ArgumentParser(description="Hexis: RL fine-tune an expert head")
     parser.add_argument("--checkpoint", required=True, help="SFT checkpoint path")
     parser.add_argument("--subgoal", required=True, help="Expert subgoal text")
     parser.add_argument("--backbone", default="Qwen/Qwen3-VL-4B-Instruct")
@@ -52,7 +41,6 @@ def main() -> None:
     log.info("Loading backbone: %s", args.backbone)
     backbone = VLMBackbone(model_name=args.backbone)
 
-    # Load expert from SFT checkpoint
     ckpt_path = Path(args.checkpoint)
     ckpt = torch.load(ckpt_path / "expert.pt" if ckpt_path.is_dir() else ckpt_path,
                       map_location=device, weights_only=True)
@@ -76,7 +64,6 @@ def main() -> None:
     )
 
     log.info("Result: %s", json.dumps(result, indent=2))
-    # Print JSON for automation (improvement loop parses this)
     print(json.dumps(result))
 
 

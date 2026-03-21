@@ -16,9 +16,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from cua_sl.harness.ssim import compute_ssim, ssim_to_reward
-from cua_sl.model.backbone import VLMBackbone
-from cua_sl.model.expert_head import ACTION_NAMES, ExpertActionHead
+from hexis.harness.ssim import compute_ssim, ssim_to_reward
+from hexis.model.backbone import VLMBackbone
+from hexis.model.expert_head import ACTION_NAMES, ExpertActionHead
 
 log = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from cua_sl.data.schemas import TrajectoryRecord
+from hexis.data.schemas import TrajectoryRecord
 
 log = logging.getLogger(__name__)
 

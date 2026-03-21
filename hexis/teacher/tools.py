@@ -9,10 +9,10 @@ from __future__ import annotations
 import base64
 import logging
 
-from cua_sl.harness.page import BenchmarkPage
-from cua_sl.harness.ssim import compute_ssim
-from cua_sl.model.expert_head import ACTION_NAMES
-from cua_sl.model.policy import MoEPolicy
+from hexis.harness.page import BenchmarkPage
+from hexis.harness.ssim import compute_ssim
+from hexis.model.expert_head import ACTION_NAMES
+from hexis.model.policy import MoEPolicy
 
 log = logging.getLogger(__name__)
 

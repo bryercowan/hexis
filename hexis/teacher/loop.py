@@ -15,24 +15,24 @@ from pathlib import Path
 import anthropic
 from playwright.async_api import async_playwright
 
-from cua_sl.harness.page import BenchmarkPage
-from cua_sl.harness.ssim import compute_ssim
-from cua_sl.model.policy import MoEPolicy
-from cua_sl.self_improve.harness import SelfImprovementHarness
-from cua_sl.self_improve.pattern_detector import PatternDetector
-from cua_sl.teacher.stuck import StuckDetector
-from cua_sl.teacher.tools import (
+from hexis.harness.page import BenchmarkPage
+from hexis.harness.ssim import compute_ssim
+from hexis.model.policy import MoEPolicy
+from hexis.self_improve.harness import SelfImprovementHarness
+from hexis.self_improve.pattern_detector import PatternDetector
+from hexis.teacher.stuck import StuckDetector
+from hexis.teacher.tools import (
     VIEWPORT_H,
     VIEWPORT_W,
     build_system_prompt,
     build_tools,
     execute_expert,
 )
-from cua_sl.teacher.trajectory_logger import TrajectoryLogger
-from cua_sl.teacher.window import SlidingWindow
-from cua_sl.util.image import b64_to_content_block, screenshot_to_content_block
+from hexis.teacher.trajectory_logger import TrajectoryLogger
+from hexis.teacher.window import SlidingWindow
+from hexis.util.image import b64_to_content_block, screenshot_to_content_block
 
-from cua_sl.data.schemas import ExpertStatus, TrajectoryRecord
+from hexis.data.schemas import ExpertStatus, TrajectoryRecord
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ async def run_benchmark(
         system_prompt = build_system_prompt(policy)
         tools = build_tools(policy)
     else:
-        from cua_sl.teacher.tools import SYSTEM_BASE
+        from hexis.teacher.tools import SYSTEM_BASE
         system_prompt = SYSTEM_BASE + (
             "\n- Click green Dismiss/Close buttons to dismiss popups. Gray X buttons are FAKE."
             "\n- For the radio modal: scroll down within the modal to find 'Correct Choice', click it."

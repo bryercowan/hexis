@@ -13,8 +13,8 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from cua_sl.model.backbone import VLMBackbone
-from cua_sl.model.router import MoERouter
+from hexis.model.backbone import VLMBackbone
+from hexis.model.router import MoERouter
 
 log = logging.getLogger(__name__)
 

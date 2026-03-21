@@ -1,14 +1,4 @@
-#!/usr/bin/env python3
-"""Main entry: Claude teacher + optional expert dispatch.
-
-Usage:
-    # Claude-only (no experts)
-    python scripts/run_teacher.py --version 1 --max-steps 200 --headed -v
-
-    # With MoE policy (experts loaded from checkpoints)
-    python scripts/run_teacher.py --version 1 --max-steps 200 --headed -v \
-        --expert dismiss_popups=checkpoints/popup_rl/best
-"""
+"""Hexis CLI entry point. Run with: python -m hexis"""
 
 from __future__ import annotations
 
@@ -16,18 +6,16 @@ import argparse
 import asyncio
 import logging
 import sys
-from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from cua_sl.teacher.loop import run_benchmark
+from hexis.teacher.loop import run_benchmark
 
 log = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CUA-SL: Claude teacher + expert dispatch")
+    parser = argparse.ArgumentParser(
+        description="Hexis: self-learning computer use agent",
+    )
     parser.add_argument("--version", type=int, default=1, choices=[1, 2, 3])
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--model", type=str, default="claude-sonnet-4-20250514")
@@ -38,7 +26,7 @@ def main() -> None:
     )
     parser.add_argument("--backbone", default="Qwen/Qwen3-VL-4B-Instruct")
     parser.add_argument("--use-harness", action="store_true",
-                        help="Enable self-improvement harness (auto-label trajectories)")
+                        help="Enable self-improvement harness")
     parser.add_argument("--min-training-pairs", type=int, default=200,
                         help="Min training pairs before SFT triggers (default 200)")
     parser.add_argument("--min-occurrences", type=int, default=3,
@@ -59,11 +47,10 @@ def main() -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    # Build MoE policy if experts provided
     policy = None
     if args.expert:
-        from cua_sl.model.backbone import VLMBackbone
-        from cua_sl.model.policy import MoEPolicy
+        from hexis.model.backbone import VLMBackbone
+        from hexis.model.policy import MoEPolicy
 
         backbone = VLMBackbone(model_name=args.backbone)
         policy = MoEPolicy(backbone)
@@ -79,10 +66,9 @@ def main() -> None:
             except FileNotFoundError as e:
                 log.warning("Expert '%s' not found: %s — skipping", name, e)
 
-    # Build improvement harness
     harness = None
     if args.use_harness:
-        from cua_sl.self_improve.harness import SelfImprovementHarness
+        from hexis.self_improve.harness import SelfImprovementHarness
         harness = SelfImprovementHarness(
             backbone_name=args.backbone,
             min_sft_samples=args.min_sft_samples,

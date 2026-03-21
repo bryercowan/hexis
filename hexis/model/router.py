@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from cua_sl.model.backbone import VLMBackbone
+from hexis.model.backbone import VLMBackbone
 
 log = logging.getLogger(__name__)
 

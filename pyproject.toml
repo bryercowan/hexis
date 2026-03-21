@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cua-sl"
+name = "hexis"
 version = "0.1.0"
-description = "Self-Learning Computer Use Agent: frozen VLM backbone + trainable expert heads"
+description = "Hexis: Self-Learning Computer Use Agent with frozen VLM backbone + trainable expert heads"
 requires-python = ">=3.11"
 dependencies = [
     "torch>=2.2",
@@ -16,8 +16,11 @@ dependencies = [
     "anthropic>=0.39",
 ]
 
+[project.scripts]
+hexis = "hexis.__main__:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [tool.setuptools.packages.find]
-include = ["cua_sl*"]
+include = ["hexis*"]

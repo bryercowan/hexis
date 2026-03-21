@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from cua_sl.model.expert_head import (
+from hexis.model.expert_head import (
     ACTION_NAMES,
     BACKBONE_DIM,
     EXPERT_DIM,

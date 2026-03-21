@@ -12,14 +12,14 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from cua_sl.model.backbone import VLMBackbone
-from cua_sl.model.expert_head import (
+from hexis.model.backbone import VLMBackbone
+from hexis.model.expert_head import (
     BACKBONE_DIM,
     EXPERT_DIM,
     NUM_ACTION_TYPES,
     ExpertActionHead,
 )
-from cua_sl.model.router import MoERouter
+from hexis.model.router import MoERouter
 
 log = logging.getLogger(__name__)
 

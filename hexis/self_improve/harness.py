@@ -17,17 +17,17 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cua_sl.data.schemas import (
+from hexis.data.schemas import (
     CheckpointRecord,
     DataRequest,
     DataSource,
     ExpertStatus,
     TrajectoryRecord,
 )
-from cua_sl.data.registry import ExpertRegistry
-from cua_sl.data.trajectory_store import TrajectoryStore
-from cua_sl.self_improve.improvement_loop import ImprovementLoop
-from cua_sl.self_improve.labeler import label_trajectory_entry
+from hexis.data.registry import ExpertRegistry
+from hexis.data.trajectory_store import TrajectoryStore
+from hexis.self_improve.improvement_loop import ImprovementLoop
+from hexis.self_improve.labeler import label_trajectory_entry
 
 log = logging.getLogger(__name__)
 
@@ -197,9 +197,9 @@ class SelfImprovementHarness:
         log.info("Training router with %d experts: %s", len(expert_map), list(expert_map.keys()))
 
         try:
-            from cua_sl.model.backbone import VLMBackbone
-            from cua_sl.model.router import MoERouter
-            from cua_sl.training.router_sft import train_router
+            from hexis.model.backbone import VLMBackbone
+            from hexis.model.router import MoERouter
+            from hexis.training.router_sft import train_router
 
             backbone = VLMBackbone(model_name=self.backbone_name)
             router = MoERouter(backbone)

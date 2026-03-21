@@ -2,7 +2,7 @@
 
 import pytest
 
-from cua_sl.self_improve.pattern_detector import (
+from hexis.self_improve.pattern_detector import (
     PatternDetector,
     SkillProposal,
     _action_signature,

@@ -19,8 +19,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from cua_sl.model.backbone import IMG_H, IMG_W, VLMBackbone
-from cua_sl.model.expert_head import (
+from hexis.model.backbone import IMG_H, IMG_W, VLMBackbone
+from hexis.model.expert_head import (
     EXPERT_DIM,
     NUM_ACTION_TYPES,
     ExpertActionHead,

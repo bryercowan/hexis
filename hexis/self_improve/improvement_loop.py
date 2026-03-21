@@ -14,17 +14,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from cua_sl.data.schemas import (
+from hexis.data.schemas import (
     CheckpointRecord,
     DataRequest,
     ExpertStatus,
 )
-from cua_sl.data.registry import ExpertRegistry
-from cua_sl.data.trajectory_store import TrajectoryStore
+from hexis.data.registry import ExpertRegistry
+from hexis.data.trajectory_store import TrajectoryStore
 
 log = logging.getLogger(__name__)
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class ImprovementLoop:
@@ -78,7 +76,7 @@ class ImprovementLoop:
         self.registry.set_status(expert_name, ExpertStatus.TRAINING_SFT)
         subgoal = expert["subgoal"]
 
-        export_dir = Path(f"/tmp/cua_sl_improve_{expert_name}")
+        export_dir = Path(f"/tmp/hexis_improve_{expert_name}")
         export_dir.mkdir(parents=True, exist_ok=True)
         train_path = export_dir / "train.jsonl"
         val_path = export_dir / "val.jsonl"
@@ -321,9 +319,8 @@ def _run_sft_round(
     backbone: str, output_dir: str, epochs: int,
     resume: str | None = None, feature_cache: str | None = None,
 ) -> dict[str, Any] | None:
-    script = str(PROJECT_ROOT / "scripts" / "train_expert_sft.py")
     cmd = [
-        sys.executable, script,
+        sys.executable, "-m", "hexis.training.sft_cli",
         "--data", data_path, "--val-data", val_path,
         "--expert", expert_name, "--subgoal", subgoal,
         "--backbone", backbone, "--output", output_dir,
@@ -370,9 +367,8 @@ def _run_rl_round(
     checkpoint: str, subgoal: str, episodes: int,
     output_dir: str, version: int = 1,
 ) -> dict[str, Any] | None:
-    script = str(PROJECT_ROOT / "scripts" / "train_expert_rl.py")
     cmd = [
-        sys.executable, script,
+        sys.executable, "-m", "hexis.training.rl_cli",
         "--checkpoint", checkpoint,
         "--subgoal", subgoal,
         "--episodes", str(episodes),
