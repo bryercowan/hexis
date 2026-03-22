@@ -107,9 +107,11 @@ def train_router(
             continue
 
         screenshot_b64 = record.get("screenshot_b64", "")
-        task_text = record.get("task_text", "")
-        if not screenshot_b64 or not task_text:
+        if not screenshot_b64:
             continue
+        # Use uniform text for ALL samples so the adapter learns from
+        # vision features only, not text embedding differences.
+        task_text = "act"
 
         screenshot_bytes = base64.b64decode(screenshot_b64)
         img_inputs = backbone.preprocess_image(screenshot_bytes)
@@ -137,30 +139,54 @@ def train_router(
 
     log.info("Cached %d features in %.1fs", len(cached_features), time.time() - t0)
 
-    # --- Phase 2: Train on cached features with mini-batches ---
+    # --- Phase 2: Train/val split ---
+    rng = random.Random(42)
+    shuffled = list(range(len(cached_features)))
+    rng.shuffle(shuffled)
+    n_val = max(1, int(len(shuffled) * 0.15))
+    val_idx = set(shuffled[:n_val])
+    train_set = [cached_features[i] for i in range(len(cached_features)) if i not in val_idx]
+    val_set = [cached_features[i] for i in val_idx]
+    log.info("Split: %d train, %d val", len(train_set), len(val_set))
+
+    # --- Phase 3: Train on cached features with mini-batches ---
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build expert embedding matrix (fixed order)
     expert_matrix = torch.stack(
         [router._expert_embeddings[name].to(device) for name in expert_names],
         dim=0,
     ).float()
 
+    def _eval_set(data_set):
+        with torch.no_grad():
+            all_vis = torch.cat([f["vis_pooled"] for f in data_set], dim=0).to(device)
+            all_txt = torch.cat([f["txt_pooled"] for f in data_set], dim=0).to(device)
+            all_labels = torch.tensor([f["label"] for f in data_set], device=device)
+            q_in = torch.cat([all_vis.float(), all_txt.float()], dim=-1)
+            q = F.normalize(router.query_adapter(q_in), dim=-1)
+            logits = q @ expert_matrix.T
+            loss = F.cross_entropy(logits, all_labels).item()
+            acc = (logits.argmax(dim=-1) == all_labels).float().mean().item()
+        return loss, acc
+
     optimizer = torch.optim.AdamW(router.query_adapter.parameters(), lr=lr, weight_decay=1e-4)
-    best_loss = float("inf")
+    best_val_loss = float("inf")
+    patience = 0
+    max_patience = 5
 
     for epoch in range(epochs):
-        indices = np.random.permutation(len(cached_features))
+        indices = np.random.permutation(len(train_set))
         total_loss = 0.0
         n_batches = 0
 
+        router.query_adapter.train()
         for batch_start in range(0, len(indices), batch_size):
             batch_idx = indices[batch_start:batch_start + batch_size]
 
-            vis_batch = torch.cat([cached_features[i]["vis_pooled"] for i in batch_idx], dim=0).to(device)
-            txt_batch = torch.cat([cached_features[i]["txt_pooled"] for i in batch_idx], dim=0).to(device)
-            labels = torch.tensor([cached_features[i]["label"] for i in batch_idx], device=device)
+            vis_batch = torch.cat([train_set[i]["vis_pooled"] for i in batch_idx], dim=0).to(device)
+            txt_batch = torch.cat([train_set[i]["txt_pooled"] for i in batch_idx], dim=0).to(device)
+            labels = torch.tensor([train_set[i]["label"] for i in batch_idx], device=device)
 
             query_input = torch.cat([vis_batch.float(), txt_batch.float()], dim=-1)
             query = F.normalize(router.query_adapter(query_input), dim=-1)
@@ -176,23 +202,26 @@ def train_router(
             total_loss += loss.item()
             n_batches += 1
 
-        mean_loss = total_loss / max(n_batches, 1)
+        train_loss = total_loss / max(n_batches, 1)
 
-        # Compute accuracy
-        with torch.no_grad():
-            all_vis = torch.cat([f["vis_pooled"] for f in cached_features], dim=0).to(device)
-            all_txt = torch.cat([f["txt_pooled"] for f in cached_features], dim=0).to(device)
-            all_labels = torch.tensor([f["label"] for f in cached_features], device=device)
-            q = F.normalize(router.query_adapter(torch.cat([all_vis.float(), all_txt.float()], dim=-1)), dim=-1)
-            preds = (q @ expert_matrix.T).argmax(dim=-1)
-            acc = (preds == all_labels).float().mean().item()
+        router.query_adapter.eval()
+        val_loss, val_acc = _eval_set(val_set)
+        train_loss_full, train_acc = _eval_set(train_set)
 
-        log.info("epoch=%d  loss=%.4f  acc=%.1f%%  samples=%d", epoch, mean_loss, acc * 100, len(cached_features))
+        log.info("epoch=%d  train_loss=%.4f train_acc=%.1f%%  val_loss=%.4f val_acc=%.1f%%",
+                 epoch, train_loss_full, train_acc * 100, val_loss, val_acc * 100)
 
-        if mean_loss < best_loss:
-            best_loss = mean_loss
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience = 0
             router.save(output_dir / "best")
+        else:
+            patience += 1
+            if patience >= max_patience:
+                log.info("Early stopping at epoch %d (val_loss plateau for %d epochs)",
+                         epoch, max_patience)
+                break
 
     router.save(output_dir / "final")
-    log.info("Router training complete: best_loss=%.4f", best_loss)
-    return best_loss
+    log.info("Router training complete: best_val_loss=%.4f", best_val_loss)
+    return best_val_loss
