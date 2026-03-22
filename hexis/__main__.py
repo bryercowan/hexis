@@ -35,6 +35,10 @@ def main() -> None:
                         help="Min samples to start SFT training (default 20)")
     parser.add_argument("--router-first", action="store_true",
                         help="Router-first mode: experts handle what they can, Claude fallback")
+    parser.add_argument("--router", type=str, default=None,
+                        help="Router checkpoint path (loads learned adapter)")
+    parser.add_argument("--router-confidence", type=float, default=0.4,
+                        help="Router confidence threshold (default 0.4)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -53,7 +57,7 @@ def main() -> None:
         from hexis.model.policy import MoEPolicy
 
         backbone = VLMBackbone(model_name=args.backbone)
-        policy = MoEPolicy(backbone)
+        policy = MoEPolicy(backbone, router_confidence=args.router_confidence)
 
         for spec in args.expert:
             if "=" not in spec:
@@ -65,6 +69,13 @@ def main() -> None:
                 log.info("Loaded expert '%s' from %s", name, ckpt_path)
             except FileNotFoundError as e:
                 log.warning("Expert '%s' not found: %s — skipping", name, e)
+
+        if args.router:
+            try:
+                policy.load_router(args.router)
+                log.info("Loaded router from %s", args.router)
+            except FileNotFoundError as e:
+                log.warning("Router not found: %s — using text fallback", e)
 
     harness = None
     if args.use_harness:

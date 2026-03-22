@@ -264,6 +264,7 @@ class MoEPolicy(nn.Module):
         self.router.save(path)
 
     def load_router(self, path: str | Path) -> None:
+        self.router.register_none_expert()
         self.router.load(path)
 
     # ------------------------------------------------------------------

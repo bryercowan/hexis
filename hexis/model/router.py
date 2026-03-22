@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 class MoERouter(nn.Module):
     """Routes conditioning requests to experts."""
 
-    def __init__(self, backbone: VLMBackbone, confidence_threshold: float = 0.85):
+    def __init__(self, backbone: VLMBackbone, confidence_threshold: float = 0.4):
         super().__init__()
         self.backbone = backbone
         self.confidence_threshold = confidence_threshold
