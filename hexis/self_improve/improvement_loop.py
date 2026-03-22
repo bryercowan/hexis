@@ -243,7 +243,8 @@ class ImprovementLoop:
 
             log.info("  Round %d: avg_reward=%.2f", round_idx + 1, avg_reward)
 
-            if avg_reward > best_reward:
+            # Require meaningful improvement (at least 0.5) to reset plateau
+            if avg_reward > best_reward + 0.5:
                 best_reward = avg_reward
                 best_checkpoint_path = checkpoint_path
                 plateau_count = 0
