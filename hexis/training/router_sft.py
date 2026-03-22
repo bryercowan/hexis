@@ -56,19 +56,14 @@ def train_router(
     none_data_path: str | Path | None = None,
     epochs: int = 10,
     lr: float = 1e-4,
+    batch_size: int = 16,
 ) -> float:
-    """Train the router query adapter. Returns best loss.
+    """Train the router query adapter with cached features. Returns best loss."""
+    import random
+    import time
 
-    Args:
-        backbone: Frozen VLM backbone.
-        router: MoERouter instance with experts registered.
-        expert_map: {name: subgoal} for registered experts.
-        data_path: JSONL with screenshot_b64/task_text/expert_name.
-        output_dir: Where to save router checkpoints.
-        none_data_path: Optional JSONL for __none__ class.
-        epochs: Training epochs.
-        lr: Learning rate.
-    """
+    import numpy as np
+
     for name, subgoal in expert_map.items():
         if not router.has_expert(name):
             router.register_expert(name, subgoal)
@@ -88,7 +83,6 @@ def train_router(
     records = load_records(data_path)
     if has_none:
         none_records = load_records(none_data_path)
-        # Balance: downsample none to 2x the median expert count
         expert_counts = {}
         for r in records:
             en = r.get("expert_name", "")
@@ -97,60 +91,104 @@ def train_router(
             median_count = sorted(expert_counts.values())[len(expert_counts) // 2]
             max_none = median_count * 2
             if len(none_records) > max_none:
-                import random
                 random.seed(42)
                 none_records = random.sample(none_records, max_none)
         records.extend(none_records)
 
-    optimizer = torch.optim.AdamW(router.query_adapter.parameters(), lr=lr, weight_decay=1e-4)
-    best_loss = float("inf")
+    # --- Phase 1: Extract and cache all backbone features (one-time cost) ---
+    log.info("Caching backbone features for %d records...", len(records))
+    device = backbone.device
+    cached_features: list[dict] = []
+    t0 = time.time()
+
+    for i, record in enumerate(records):
+        expert_name = record.get("expert_name")
+        if expert_name not in label_map:
+            continue
+
+        screenshot_b64 = record.get("screenshot_b64", "")
+        task_text = record.get("task_text", "")
+        if not screenshot_b64 or not task_text:
+            continue
+
+        screenshot_bytes = base64.b64decode(screenshot_b64)
+        img_inputs = backbone.preprocess_image(screenshot_bytes)
+        with torch.no_grad():
+            vis_tokens, _, _ = backbone.vision_features(
+                img_inputs["pixel_values"], img_inputs["image_grid_thw"],
+            )
+            input_ids, attn_mask = backbone.tokenize_subgoal(task_text)
+            text_tokens = backbone.text_features(input_ids, attn_mask)
+
+        # Pool and concat now (what the router adapter expects)
+        vis_pooled = vis_tokens.mean(dim=1).cpu()
+        txt_pooled = text_tokens.mean(dim=1).cpu()
+
+        cached_features.append({
+            "vis_pooled": vis_pooled,
+            "txt_pooled": txt_pooled,
+            "label": label_map[expert_name],
+        })
+
+        if (i + 1) % 50 == 0 or i == len(records) - 1:
+            rate = (i + 1) / (time.time() - t0)
+            eta = (len(records) - i - 1) / rate if rate > 0 else 0
+            log.info("  cached %d/%d (%.1f/s, ETA %.0fs)", i + 1, len(records), rate, eta)
+
+    log.info("Cached %d features in %.1fs", len(cached_features), time.time() - t0)
+
+    # --- Phase 2: Train on cached features with mini-batches ---
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Build expert embedding matrix (fixed order)
+    expert_matrix = torch.stack(
+        [router._expert_embeddings[name].to(device) for name in expert_names],
+        dim=0,
+    ).float()
+
+    optimizer = torch.optim.AdamW(router.query_adapter.parameters(), lr=lr, weight_decay=1e-4)
+    best_loss = float("inf")
+
     for epoch in range(epochs):
+        indices = np.random.permutation(len(cached_features))
         total_loss = 0.0
-        seen = 0
+        n_batches = 0
 
-        for record in records:
-            expert_name = record.get("expert_name")
-            if expert_name not in label_map:
-                continue
+        for batch_start in range(0, len(indices), batch_size):
+            batch_idx = indices[batch_start:batch_start + batch_size]
 
-            screenshot_b64 = record.get("screenshot_b64", "")
-            task_text = record.get("task_text", "")
-            if not screenshot_b64 or not task_text:
-                continue
+            vis_batch = torch.cat([cached_features[i]["vis_pooled"] for i in batch_idx], dim=0).to(device)
+            txt_batch = torch.cat([cached_features[i]["txt_pooled"] for i in batch_idx], dim=0).to(device)
+            labels = torch.tensor([cached_features[i]["label"] for i in batch_idx], device=device)
 
-            screenshot_bytes = base64.b64decode(screenshot_b64)
-            img_inputs = backbone.preprocess_image(screenshot_bytes)
-            with torch.no_grad():
-                vis_tokens, _, _ = backbone.vision_features(
-                    img_inputs["pixel_values"],
-                    img_inputs["image_grid_thw"],
-                )
-                input_ids, attn_mask = backbone.tokenize_subgoal(task_text)
-                text_tokens = backbone.text_features(input_ids, attn_mask)
+            query_input = torch.cat([vis_batch.float(), txt_batch.float()], dim=-1)
+            query = F.normalize(router.query_adapter(query_input), dim=-1)
+            logits = query @ expert_matrix.T
 
-            expert_order, logits = router.logits_from_features(vis_tokens, text_tokens)
-            if expert_order != expert_names:
-                reorder = torch.tensor(
-                    [expert_order.index(name) for name in expert_names if name in expert_order],
-                    device=logits.device,
-                )
-                logits = logits[:, reorder]
-
-            target = torch.tensor([label_map[expert_name]], device=logits.device)
-            loss = F.cross_entropy(logits, target)
+            loss = F.cross_entropy(logits, labels)
 
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(router.query_adapter.parameters(), 1.0)
             optimizer.step()
 
-            total_loss += float(loss.item())
-            seen += 1
+            total_loss += loss.item()
+            n_batches += 1
 
-        mean_loss = total_loss / max(seen, 1)
-        log.info("epoch=%d  loss=%.4f  samples=%d", epoch, mean_loss, seen)
+        mean_loss = total_loss / max(n_batches, 1)
+
+        # Compute accuracy
+        with torch.no_grad():
+            all_vis = torch.cat([f["vis_pooled"] for f in cached_features], dim=0).to(device)
+            all_txt = torch.cat([f["txt_pooled"] for f in cached_features], dim=0).to(device)
+            all_labels = torch.tensor([f["label"] for f in cached_features], device=device)
+            q = F.normalize(router.query_adapter(torch.cat([all_vis.float(), all_txt.float()], dim=-1)), dim=-1)
+            preds = (q @ expert_matrix.T).argmax(dim=-1)
+            acc = (preds == all_labels).float().mean().item()
+
+        log.info("epoch=%d  loss=%.4f  acc=%.1f%%  samples=%d", epoch, mean_loss, acc * 100, len(cached_features))
+
         if mean_loss < best_loss:
             best_loss = mean_loss
             router.save(output_dir / "best")
