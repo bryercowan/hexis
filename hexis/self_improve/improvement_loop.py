@@ -96,6 +96,7 @@ class ImprovementLoop:
         feature_cache = str(export_dir / "features")
 
         best_val_loss = float("inf")
+        best_val_px = float("inf")
         best_checkpoint_path: str | None = None
         plateau_count = 0
         overfit_count = 0
@@ -132,6 +133,7 @@ class ImprovementLoop:
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
+                best_val_px = val_px_error
                 best_checkpoint_path = checkpoint_path
                 plateau_count = 0
                 overfit_count = 0
@@ -175,16 +177,19 @@ class ImprovementLoop:
                     return CheckpointRecord.from_dict({
                         "version": checkpoint_version - 1, "phase": "sft",
                         "path": best_checkpoint_path, "epoch": 0,
-                        "val_loss": best_val_loss, "timestamp": time.time(),
+                        "val_loss": best_val_loss, "val_px_error": best_val_px,
+                        "timestamp": time.time(),
                     }), data_request
                 return None, data_request
 
         if best_checkpoint_path:
-            log.info("SFT complete: best_val_loss=%.4f at %s", best_val_loss, best_checkpoint_path)
+            log.info("SFT complete: best_val_loss=%.4f val_px=%.1f at %s",
+                     best_val_loss, best_val_px, best_checkpoint_path)
             return CheckpointRecord.from_dict({
                 "version": checkpoint_version - 1, "phase": "sft",
                 "path": best_checkpoint_path, "epoch": 0,
-                "val_loss": best_val_loss, "timestamp": time.time(),
+                "val_loss": best_val_loss, "val_px_error": best_val_px,
+                "timestamp": time.time(),
             }), None
         return None, None
 
