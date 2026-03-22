@@ -39,7 +39,7 @@ class ImprovementLoop:
         rl_round_episodes: int = 200,
         rl_max_rounds: int = 15,
         rl_plateau_patience: int = 3,
-        min_sft_samples: int = 20,
+        min_sft_samples: int = 100,
         max_val_px_error: float = 10.0,
     ):
         self.registry = registry

@@ -31,8 +31,8 @@ def main() -> None:
                         help="Min training pairs before SFT triggers (default 200)")
     parser.add_argument("--min-occurrences", type=int, default=3,
                         help="Min pattern occurrences before proposing a skill (default 3)")
-    parser.add_argument("--min-sft-samples", type=int, default=20,
-                        help="Min samples to start SFT training (default 20)")
+    parser.add_argument("--min-sft-samples", type=int, default=100,
+                        help="Min samples to start SFT training (default 100)")
     parser.add_argument("--router-first", action="store_true",
                         help="Router-first mode: experts handle what they can, Claude fallback")
     parser.add_argument("--router", type=str, default=None,
