@@ -40,7 +40,7 @@ class ImprovementLoop:
         rl_max_rounds: int = 15,
         rl_plateau_patience: int = 3,
         min_sft_samples: int = 20,
-        max_val_px_error: float = 20.0,
+        max_val_px_error: float = 10.0,
     ):
         self.registry = registry
         self.store = trajectory_store
