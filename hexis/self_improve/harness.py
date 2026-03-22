@@ -162,11 +162,14 @@ class SelfImprovementHarness:
                     results[name] = {"skipped": True, "samples": n}
         return results
 
-    def train_router(self, output_dir: str | Path = "checkpoints/router") -> str | None:
+    def train_router(
+        self,
+        output_dir: str | Path = "checkpoints/router",
+        min_val_accuracy: float = 0.6,
+    ) -> str | None:
         """Train the MoE router on all collected trajectory data.
 
-        Exports all labels from the trajectory store, trains the router's
-        query adapter, and saves a checkpoint. Returns checkpoint path or None.
+        Returns checkpoint path if val accuracy >= min_val_accuracy, else None.
         """
         output_dir = Path(output_dir)
 
@@ -218,17 +221,24 @@ class SelfImprovementHarness:
                             "expert_name": "__none__",
                         }) + "\n")
 
-            best_loss = train_router(
+            best_loss, val_acc = train_router(
                 backbone=backbone,
                 router=router,
                 expert_map=expert_map,
                 data_path=str(router_data),
                 output_dir=str(output_dir),
                 none_data_path=none_data,
-                epochs=10,
+                epochs=20,
             )
+            if val_acc < min_val_accuracy:
+                log.warning(
+                    "Router val_acc=%.1f%% < %.0f%% threshold — not deploying. "
+                    "Need more diverse training data.",
+                    val_acc * 100, min_val_accuracy * 100,
+                )
+                return None
             self.registry.set_router_retrain_time(time.time())
-            log.info("Router trained: best_loss=%.4f, checkpoint=%s", best_loss, output_dir)
+            log.info("Router trained: val_acc=%.1f%%, checkpoint=%s", val_acc * 100, output_dir)
             return str(output_dir / "best")
         except Exception as e:
             log.error("Router training failed: %s", e)

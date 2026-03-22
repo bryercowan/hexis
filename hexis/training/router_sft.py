@@ -223,5 +223,11 @@ def train_router(
                 break
 
     router.save(output_dir / "final")
-    log.info("Router training complete: best_val_loss=%.4f", best_val_loss)
-    return best_val_loss
+
+    # Final val accuracy on best checkpoint
+    router.load(output_dir / "best")
+    router.query_adapter.eval()
+    _, final_val_acc = _eval_set(val_set)
+    log.info("Router training complete: best_val_loss=%.4f, val_acc=%.1f%%",
+             best_val_loss, final_val_acc * 100)
+    return best_val_loss, final_val_acc

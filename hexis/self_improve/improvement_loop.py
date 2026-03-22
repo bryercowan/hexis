@@ -40,6 +40,7 @@ class ImprovementLoop:
         rl_max_rounds: int = 15,
         rl_plateau_patience: int = 3,
         min_sft_samples: int = 20,
+        max_val_px_error: float = 50.0,
     ):
         self.registry = registry
         self.store = trajectory_store
@@ -53,6 +54,7 @@ class ImprovementLoop:
         self.rl_max_rounds = rl_max_rounds
         self.rl_plateau_patience = rl_plateau_patience
         self.min_sft_samples = min_sft_samples
+        self.max_val_px_error = max_val_px_error
 
     def run_sft(
         self,
@@ -285,7 +287,12 @@ class ImprovementLoop:
         self,
         expert_name: str,
     ) -> tuple[CheckpointRecord | None, DataRequest | None]:
-        """Run full SFT -> RL pipeline."""
+        """Run full SFT -> behavioral validation -> RL pipeline.
+
+        After SFT, checks val_px_error against threshold. If the expert
+        can't reproduce the teacher's clicks within max_val_px_error pixels,
+        it requests more data instead of proceeding to RL.
+        """
         sft_ckpt, sft_request = self.run_sft(expert_name)
 
         if sft_request is not None and sft_ckpt is None:
@@ -295,7 +302,30 @@ class ImprovementLoop:
             log.error("SFT produced no checkpoint for '%s'", expert_name)
             return None, None
 
-        log.info("SFT done, starting RL from %s", sft_ckpt.path)
+        # --- Behavioral validation gate ---
+        val_px = sft_ckpt.val_px_error
+        if val_px > self.max_val_px_error:
+            log.warning(
+                "BEHAVIORAL CHECK FAILED: '%s' val_px_error=%.1f > threshold=%.1f. "
+                "Expert can't reproduce teacher's clicks. Requesting more data.",
+                expert_name, val_px, self.max_val_px_error,
+            )
+            data_request = DataRequest(
+                expert_name=expert_name,
+                reason=f"Behavioral validation failed: val_px_error={val_px:.1f}px "
+                       f"(threshold={self.max_val_px_error:.0f}px). "
+                       f"Expert can't reproduce teacher clicks accurately enough.",
+                min_additional=100,
+                priority=1,
+            )
+            self.registry.set_status(expert_name, ExpertStatus.NEEDS_DATA)
+            self.registry.set_data_request(expert_name, data_request)
+            return sft_ckpt, data_request
+
+        log.info(
+            "BEHAVIORAL CHECK PASSED: '%s' val_px_error=%.1fpx (<= %.0fpx). Starting RL.",
+            expert_name, val_px, self.max_val_px_error,
+        )
         return self.run_rl(expert_name, sft_checkpoint=sft_ckpt.path)
 
 
