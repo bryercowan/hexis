@@ -545,15 +545,15 @@ async def run_benchmark(
                             "data_request": data_req.to_dict() if data_req else None,
                             "samples": n_samples,
                         }
-                        if ckpt_path:
+                        if ckpt_path and not data_req:
                             log.info("SELF-IMPROVE: '%s' trained → %s", name, ckpt_path)
-                            # Auto-deploy
                             improvement_harness.deploy_expert(name, ckpt_path, policy)
                             deployed_experts.append(name)
                             training_results[name]["deployed"] = True
                         elif data_req:
                             log.info("SELF-IMPROVE: '%s' needs more data: %s",
                                      name, data_req.reason)
+                            training_results[name]["needs_data"] = True
                     except Exception as e:
                         log.error("SELF-IMPROVE: Training '%s' failed: %s", name, e)
                         training_results[name] = {"error": str(e), "samples": n_samples}
