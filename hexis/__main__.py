@@ -39,6 +39,9 @@ def main() -> None:
                         help="Router checkpoint path (loads learned adapter)")
     parser.add_argument("--router-confidence", type=float, default=0.4,
                         help="Router confidence threshold (default 0.4)")
+    parser.add_argument("--max-rounds", type=int, default=1,
+                        help="Max collection rounds. >1 enables autonomous self-improvement: "
+                             "collect → train → gate fails → collect more → retrain")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -91,19 +94,39 @@ def main() -> None:
     if expert_names:
         log.info("Available experts: %s", expert_names)
 
-    asyncio.run(run_benchmark(
-        version=args.version,
-        max_steps=args.max_steps,
-        model=args.model,
-        headed=args.headed,
-        policy=policy,
-        verbose=args.verbose,
-        improvement_harness=harness,
-        min_training_pairs=args.min_training_pairs,
-        min_occurrences=args.min_occurrences,
-        min_sft_samples=args.min_sft_samples,
-        router_first=args.router_first,
-    ))
+    for round_num in range(args.max_rounds):
+        if args.max_rounds > 1:
+            log.info("=== COLLECTION ROUND %d/%d ===", round_num + 1, args.max_rounds)
+
+        result = asyncio.run(run_benchmark(
+            version=args.version,
+            max_steps=args.max_steps,
+            model=args.model,
+            headed=args.headed,
+            policy=policy,
+            verbose=args.verbose,
+            improvement_harness=harness,
+            min_training_pairs=args.min_training_pairs,
+            min_occurrences=args.min_occurrences,
+            min_sft_samples=args.min_sft_samples,
+            router_first=args.router_first,
+        ))
+
+        if args.max_rounds <= 1 or harness is None:
+            break
+
+        # Check if any experts still need data
+        training = result.get("self_improve", {}).get("training", {})
+        needs_data = any(
+            v.get("needs_data") or v.get("skipped")
+            for k, v in training.items()
+            if k != "_router" and isinstance(v, dict)
+        )
+        if not needs_data:
+            log.info("All experts passed validation — stopping collection.")
+            break
+
+        log.info("Experts need more data — running another collection round.")
 
 
 if __name__ == "__main__":
